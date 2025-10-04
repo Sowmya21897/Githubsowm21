@@ -1,0 +1,71 @@
+import os
+import sys
+import pandas as pd
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from awsglue.utils import getResolvedOptions
+from functools import reduce
+
+# Create a SparkSession
+spark = SparkSession.builder.appName("MEDICAL_REBATES").getOrCreate()
+
+args = getResolvedOptions(sys.argv, ['database_name', 's3_upload_path', 's3_id_transform'])
+database_name = args['database_name'].lower()
+s3_upload_path = args['s3_upload_path']
+s3_id_transform = args['s3_id_transform']
+reference_path = f"""s3://{s3_id_transform}/transform/reference_files/payer_portal_reference.csv"""
+
+df12 = spark.read.csv(reference_path, header=True)
+df12.createOrReplaceTempView("payer_portal_reference")
+
+qry = f"""SELECT file_name FROM payer_portal_reference WHERE script = 'MEDICAL_REBATES' ORDER BY file_name"""
+excel_files = spark.sql(qry)
+
+columnsList = ['Carrier ID', 'Carrier Name', 'NDC11 #', 'NDC 11 Description', 'Product Description', 'Derived Drug Quantity', 'Filled Date', 'WAC Price Amount']
+columns_to_rename = {
+    'Carrier ID': 'Carrier_ID',
+    'Carrier Name': 'Carrier_Name',
+    'NDC11 #': 'NDC11',
+    'NDC 11 Description': 'NDC_11_Description',
+    'Product Description': 'Product_Description',
+    'Derived Drug Quantity': 'Derived_Drug_Quantity',
+    'Filled Date': 'Filled_Date',
+    'WAC Price Amount': 'WAC_Price_Amount',
+}
+
+dataframes = []
+for row in excel_files.collect():
+    file_name = row["file_name"]
+    source = file_name.split('_')[-1].split('.')[0] 
+    brand_name = file_name.split('-')[-1].strip().split('.')[0]
+    s3_path =  f"""{s3_upload_path}/{file_name}"""
+
+    pandas_df = pd.read_excel(s3_path, sheet_name='Detail', header=7, index_col=False, usecols=columnsList, skipfooter=1)
+    df = spark.createDataFrame(pandas_df)
+
+    for old_col, new_col in columns_to_rename.items():
+        df = df.withColumnRenamed(old_col, new_col)
+
+    result_df = df.withColumn("Fill_Date", date_format("Filled_Date", "yyyy-MM-dd")) \
+                  .drop("Filled_Date") \
+                  .withColumn('Source', lit(source)) \
+                  .withColumn('Brand', lit(brand_name)) \
+                  .withColumn('Formulary_id', lit('')) \
+                  .withColumn('Formulary_name', lit('')) \
+                  .withColumn('RX', lit(''))\
+                  .withColumn("Channel",lit('Medical'))\
+                  .withColumn("Payer_name",lit('ESI Medical'))
+    dataframes.append(result_df)    
+
+final_df = reduce(lambda df1, df2: df1.union(df2), dataframes)
+
+final_df = final_df.withColumnRenamed("Product_Description", "Product") \
+    .withColumnRenamed("Carrier_ID", "Plan_Id") \
+    .withColumnRenamed("Carrier_Name", "Plan_Name") \
+    .withColumnRenamed("NDC11", "NDC_Number") \
+    .withColumnRenamed("NDC_11_Description", "NDC_Name") \
+    .withColumnRenamed("fill_date", "Fill_Date") \
+    .withColumnRenamed("Derived_Drug_Quantity", "Units") \
+    .withColumnRenamed("WAC_Price_Amount", "WAC")
+
+final_df.write.option("compression", "snappy").option("overwriteSchema", "true").option("path", f"""s3://{s3_id_transform}/transform/one_analytics_tier1/PAYER_T1_MEDICAL_REBATES""").mode("overwrite").format("parquet").saveAsTable(f"{database_name}.PAYER_T1_MEDICAL_REBATES")

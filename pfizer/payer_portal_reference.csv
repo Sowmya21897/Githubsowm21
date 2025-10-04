@@ -1,0 +1,23 @@
+﻿script,brand,file_name
+OPTUM_DATA,Dysport,MB - Custom_Dysport.xlsx
+OPTUM_DATA,Dysport,MB - Essential_Dysport.xlsx
+OPTUM_DATA,Dysport,MB - Flex PDL Access_Dysport.xlsx
+OPTUM_DATA,Dysport,MB - Flex PDL Base_Dysport.xlsx
+OPTUM_DATA,Dysport,MB - OptumRx Premium Value_Dysport.xlsx
+OPTUM_DATA,Dysport,MB - OptumRx Premium_Dysport.xlsx
+OPTUM_DATA,Dysport,MB - OptumRx Select_Dysport.xlsx
+OPTUM_DATA,Dysport,MB - UHC Traditional_Dysport.xlsx
+OPTUM_DATA,Somatuline,MB - Custom_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - Essential_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - Flex Advantage_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - Flex PDL Access_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - Flex PDL Base_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - OptumRx Premium Value_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - OptumRx Premium_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - OptumRx Select_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - UHC Advantage_Somatuline.xlsx
+OPTUM_DATA,Somatuline,MB - UHC Traditional_Somatuline.xlsx
+MEDICAL_REBATES,Dysport,Medical Rebates Detail Report for Export by Formulary -ESI - Dysport.xlsx
+MEDICAL_REBATES,Somatuline,Medical Rebates Detail Report for Export by Formulary -ESI - Somatuline.xlsx
+ZINC_CVS_FILL_DATE,Dysport,Zinc_CVS_Fill_Date_Dysport.csv
+ZINC_CVS_FILL_DATE,Somatuline,Zinc_CVS_Fill_Date_SD.csv

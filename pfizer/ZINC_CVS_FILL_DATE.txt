@@ -1,0 +1,149 @@
+import os
+import sys
+import pandas as pd
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, when, substring, concat, to_date, lit
+from pyspark.sql import SparkSession
+from functools import reduce
+
+from awsglue.utils import getResolvedOptions
+
+# Create a SparkSession
+spark = SparkSession.builder.appName("ZINC_CVS_FILL_DATE").getOrCreate()
+
+args = getResolvedOptions(sys.argv, ['database_name', 's3_upload_path', 's3_id_transform'])
+database_name = args['database_name'].lower()
+s3_upload_path = f"""{args['s3_upload_path']}*"""
+s3_id_transform = args['s3_id_transform']
+reference_path = f"""s3://{s3_id_transform}/transform/reference_files/payer_portal_reference.csv"""
+
+df12 = spark.read.csv(reference_path, header=True)
+df12.createOrReplaceTempView("payer_portal_reference")
+
+qry = f"""SELECT file_name FROM payer_portal_reference WHERE script = 'ZINC_CVS_FILL_DATE' ORDER BY file_name"""
+excel_files = spark.sql(qry)
+
+dataframes = []
+for row in excel_files.collect():
+    file_name = row["file_name"]
+    source = file_name.split('.')[0] 
+    s3_path = f"""{s3_upload_path}/{file_name}"""
+
+    # Read Excel file directly into Spark DataFrame
+    df = spark.read.csv(s3_path, header=True)
+
+    # Apply transformations
+    result_df = df.withColumn('Source', lit(source)).withColumn('Channel', lit('Commercial')).withColumn('payer_name', lit('Zinc Commercial'))
+    dataframes.append(result_df)
+
+final_df = reduce(lambda df1, df2: df1.union(df2), dataframes)
+
+# Define the column names with aliases
+aliases = {
+    "Brand": "Product",
+    "Market Basket": "Brand",
+    "Product_Description": "Product_Description",
+    "Market Share Type": "Market_Share_Type", 
+    "VENDORID": "Vendor_ID", 
+    "VENDOR": "Vendor", 
+    "ICD Chapter": "ICD_Chapter", 
+    "ICD Chapter Name": "ICD_Chapter_Name", 
+    "ICD Section group range": "ICD_Section_Group_Range", 
+    "ICD Section group Name": "ICD_Section_Group_Name", 
+    "ICD Code": "ICD_Code", 
+    "ICD Description": "ICD_Description", 
+    "Plan Formulary ID": "Formulary_ID",
+    "Plan Formulary": "Exclusion_Type", 
+    "Plan Formulary Exclusion Type": "Formulary_Name", 
+    "Client ID": "Plan_Id", 
+    "Client": "Plan_Name", 
+    "Business Segment": "Business_Segment", 
+    "Claim Type": "Claim_Type",
+    "NDC": "NDC_Number",
+    "NDC Name": "NDC_Name", 
+    "Fill State": "Fill_State", 
+    "Fill County": "Fill_County", 
+    "Fill Zip Code": "Fill_Zip_Code", 
+    "Prescriber State or Territory": "Prescriber_State_or_Territory", 
+    "Prescriber County": "Prescriber_County", 
+    "Prescriber Zip Code": "Prescriber_Zip_Code", 
+    "Prescriber NPI": "NPI", 
+    "Prescriber ID": "Prescriber_ID",
+    "Prescriber license type": "Prescriber_License_Type",
+    "Prescriber MSA": "Prescriber_MSA",
+    "Prescriber specialty CD": "Prescriber_Specialty_CD", 
+    "Prescriber specialty Description": "Prescriber_Specialty_Description", 
+    "Fill Month": "Fill_Month",
+    "Invoice Month": "Invoice_Month", 
+    "Quarter": "Quarter", 
+    "Net Rx": "RX", 
+    "Units": "Units", 
+    "WAC": "WAC", 
+    "Days Supply": "Days_Supply",
+    "fill_date": "Fill_Date"
+}
+
+columns_to_drop = ['Prescriber license type', 'Prescriber MSA', 'Prescriber specialty CD', 'Prescriber specialty Description', 'Quarter']
+
+# Drop columns
+df = final_df.drop(*columns_to_drop)
+
+for old_name, new_name in aliases.items():
+    df = df.withColumnRenamed(old_name, new_name)
+
+result_df = df.select("*",
+    when(col("fill_month").like("%JAN%"), 
+         concat(substring("fill_month", 5, 7), lit("-01-01")))
+    .when(col("fill_month").like("%FEB%"), 
+         concat(substring("fill_month", 5, 7), lit("-02-01")))
+    .when(col("fill_month").like("%MAR%"), 
+         concat(substring("fill_month", 5, 7), lit("-03-01")))
+    .when(col("fill_month").like("%APR%"), 
+         concat(substring("fill_month", 5, 7), lit("-04-01")))
+    .when(col("fill_month").like("%MAY%"), 
+         concat(substring("fill_month", 5, 7), lit("-05-01")))
+    .when(col("fill_month").like("%JUN%"), 
+         concat(substring("fill_month", 5, 7), lit("-06-01")))
+    .when(col("fill_month").like("%JUL%"), 
+         concat(substring("fill_month", 5, 7), lit("-07-01")))
+    .when(col("fill_month").like("%AUG%"), 
+         concat(substring("fill_month", 5, 7), lit("-08-01")))
+    .when(col("fill_month").like("%SEP%"), 
+         concat(substring("fill_month", 5, 7), lit("-09-01")))
+    .when(col("fill_month").like("%OCT%"), 
+         concat(substring("fill_month", 5, 7), lit("-10-01")))
+    .when(col("fill_month").like("%NOV%"), 
+         concat(substring("fill_month", 5, 7), lit("-11-01")))
+    .when(col("fill_month").like("%DEC%"), 
+         concat(substring("fill_month", 5, 7), lit("-12-01")))
+     .when(col("fill_month").like("%Jan%"), 
+         concat(substring("fill_month", 5, 7), lit("-01-01")))
+    .when(col("fill_month").like("%Feb%"), 
+         concat(substring("fill_month", 5, 7), lit("-02-01")))
+    .when(col("fill_month").like("%Mar%"), 
+         concat(substring("fill_month", 5, 7), lit("-03-01")))
+    .when(col("fill_month").like("%Apr%"), 
+         concat(substring("fill_month", 5, 7), lit("-04-01")))
+    .when(col("fill_month").like("%May%"), 
+         concat(substring("fill_month", 5, 7), lit("-05-01")))
+    .when(col("fill_month").like("%Jun%"), 
+         concat(substring("fill_month", 5, 7), lit("-06-01")))
+    .when(col("fill_month").like("%Jul%"), 
+         concat(substring("fill_month", 5, 7), lit("-07-01")))
+    .when(col("fill_month").like("%Aug%"), 
+         concat(substring("fill_month", 5, 7), lit("-08-01")))
+    .when(col("fill_month").like("%Sep%"), 
+         concat(substring("fill_month", 5, 7), lit("-09-01")))
+    .when(col("fill_month").like("%Oct%"), 
+         concat(substring("fill_month", 5, 7), lit("-10-01")))
+    .when(col("fill_month").like("%Nov%"), 
+         concat(substring("fill_month", 5, 7), lit("-11-01")))
+    .when(col("fill_month").like("%Dec%"), 
+         concat(substring("fill_month", 5, 7), lit("-12-01")))
+    .otherwise(None)
+    .alias("fill_date")
+)
+df1 = result_df.drop("fill_month")
+
+# Write DataFrame as a table
+df1.write.option("compression", "snappy").option("overwriteSchema", "true").option("path", f"""s3://{s3_id_transform}/transform/one_analytics_tier1/PAYER_T1_ZINC_CVS_FILL_DATE""").mode("overwrite").format("parquet").saveAsTable(f"{database_name}.PAYER_T1_ZINC_CVS_FILL_DATE")
