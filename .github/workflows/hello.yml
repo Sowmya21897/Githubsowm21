@@ -1,0 +1,10 @@
+name: Hello CI
+
+on: [push]   # Runs whenever you push code
+
+jobs:
+  say-hello:
+    runs-on: ubuntu-latest   # GitHub provides a Linux VM
+    steps:
+      - name: Print message
+        run: echo "Hello Sowmya! Your first GitHub Action is running 🎉"
